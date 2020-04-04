@@ -18,7 +18,7 @@ rely_on() {
 	sudo apt-get -y install asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache flex \
 g++ gawk gcc gcc-multilib gettext git git-core help2man htop lib32gcc1 libc6-dev-i386 libglib2.0-dev libncurses5-dev \
 libssl-dev libtool libz-dev libelf-dev make msmtp ncurses-term ocaml-nox p7zip p7zip-full patch qemu-utils sharutils \
-subversion texinfo uglifyjs unzip upx xmlto yui-compressor zlib1g-dev make cmake
+subversion texinfo uglifyjs unzip upx xmlto yui-compressor zlib1g-dev make cmake device-tree-compiler  g++-multilib  python3.5  
 }
 
 #显示编译文件夹
@@ -115,6 +115,7 @@ other() {
 		echo "环境搭建完成，请自行创建文件夹和git"
 		;;
 		2)
+		ls_file_luci
 		dl_other
 		;;
 		3)
@@ -134,7 +135,16 @@ esac
 }
 
 dl_other() {
-	ls_file_luci
+	dl_download
+	if [[ $? -eq 0 ]]; then
+		echo ""
+		echo -e ">>$green dl已经单独下载完成$white"
+	else
+		clear	
+		echo -e "$red dl没有下载成功,重新执行下载代码 $white" && Time
+		dl_other
+	fi
+	 
 }
 
 update_lean_package() {
@@ -147,7 +157,6 @@ update_lean_package() {
 	display_git_log_luci
 	update_feeds
 	source_config
-	make_defconfig
 }
 
 download_package() {
@@ -167,7 +176,6 @@ download_package2() {
 	display_git_log_luci
 	update_feeds
 	source_config
-	make_defconfig
 }
 
 
@@ -277,10 +285,8 @@ source_RestoreFactory() {
 	ln -s $HOME/$OW/$SF/dl  $HOME/$OW/$file/lede/dl
 	echo -e ">>$green $file文件删除完成 $white"
 	echo -e "  所有编译过的文件全部删除完成，回车可以开始编译 不需要编译Ctrl+c取消,如依旧编译失败，请重新下载源代码" && read a
-	
-	display_git_log_luci
-	source_config
-	make_defconfig
+	source_if
+	display_git_log_luci	
 }
 
 #选项2.二次编译 与 源码更新合并
@@ -363,7 +369,6 @@ display_git_log_luci() {
 			source_lienol
 			source_Setting_Public	
 			source_config
-			make_defconfig
 		else
 			echo -e  "$red >>命令错误或者网络不好，重新执行代码$white" && Time
 			display_git_log_luci
@@ -387,8 +392,9 @@ git_reset() {
 		echo ""
 		read -p "请输入你的命令（手动敲别偷懒）：" git_reset_read
 		$git_reset_read
+		rm -rf ./feeds &&  rm -rf ./tmp
 		if [[ "$?" == "0" ]]; then
-			echo ""
+			clear
 			echo ""
 			echo -e  "$green >>命令执行完成$white"
 			echo -e "$yellow你现在所用的分支版本：$white`git branch -v`" && Time
@@ -424,6 +430,7 @@ source_config() {
 			source_config
 			;;
 		esac
+			make_defconfig
 }
 
 Save_My_Config_luci() {
@@ -539,6 +546,16 @@ description_if(){
 		sudo apt update
 		sudo apt install curl -y
 	fi
+
+	#添加hosts(解决golang下载慢的问题)
+	if [[ $(grep -o "34.64.4.113 proxy.golang.org" /etc/hosts | wc -l) == "1" ]]; then
+		echo "hosts设置完成"
+	else
+		clear
+		echo "添加hosts(解决golang下载慢的问题)"
+		sudo cp  /etc/hosts /etc/hosts_back
+		sudo sed -i '3a\34.64.4.113 proxy.golang.org' /etc/hosts
+	fi
 	
 	if [[ ! -d "$HOME/$OW/$SF/$OCS" ]]; then
 		echo "开始创建主文件夹"
@@ -601,8 +618,37 @@ description_if(){
 		bash openwrt.sh
 	fi
 
-	check_system=$(cat /proc/version |grep -o Microsoft@Microsoft.com)
-	if [[ "$check_system" == "Microsoft@Microsoft.com" ]]; then
+	#win10
+	check_win10_system=$(cat /proc/version |grep -o Microsoft@Microsoft.com)
+	check_win10_system01=$(cat /proc/version |grep -o microsoft-standard)
+	if [[ "$check_win10_system" == "Microsoft@Microsoft.com" ]]; then
+		win10
+	elif [[ "$check_win10_system01" == "microsoft-standard" ]]; then
+		win10
+	else
+		echo "不是win10系统" && clear
+	fi
+	
+	clear
+
+	if [[ -e $HOME/$OW/$SF/description ]]; then
+		self_test
+		main_interface
+	else
+		clear
+		description
+		echo ""
+		read -p "请输入密码:" ps
+			if [[ $ps == $by ]]; then
+				description >> $HOME/$OW/$SF/description && clear && self_test && main_interface
+			else
+				clear && echo "+++++密码错误++++++" && Time && description_if
+			fi
+	fi
+}
+
+win10() {
+		export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games"
 		if [[ -e /etc/apt/sources.list.back ]]; then
 			clear && echo -e "$green源码已替换$white"
 		else
@@ -624,6 +670,8 @@ description_if(){
 					sudo cp  /etc/apt/sources.list /etc/apt/sources.list.back
 					sudo rm -rf /etc/apt/sources.list
 					sudo cp $HOME/$OW/$SF/$OCS/ubuntu18.4_sources.list /etc/apt/sources.list
+					sudo apt-get update
+					sudo apt-get install git-core build-essential libssl-dev libncurses5-dev unzip
 					;;
 				2)
 					 clear
@@ -636,26 +684,6 @@ description_if(){
 				esac
 			
 			fi
-		else
-				echo "不是win10系统" && clear
-		fi
-	
-	clear
-
-	if [[ -e $HOME/$OW/$SF/description ]]; then
-		self_test
-		main_interface
-	else
-		clear
-		description
-		echo ""
-		read -p "请输入密码:" ps
-			if [[ $ps == $by ]]; then
-				description >> $HOME/$OW/$SF/description && clear && self_test && main_interface
-			else
-				clear && echo "+++++密码错误++++++" && Time && description_if
-			fi
-	fi
 }
 
 self_test() {
@@ -818,7 +846,7 @@ update_system() {
 	else
 		clear	
 		echo "依赖没有更新或安装成功，重新执行代码" && Time
-		rely_on
+		update_system
 	fi
 }
 
@@ -881,9 +909,9 @@ source_download_openwrt() {
 		echo ""
 		echo "	1.Lean_R8(stable version)_source"
 		echo ""
-		echo " 	2.Lean_R9(Trunk)_source"
+		echo " 	2.Lean_R20(Trunk)_source"
 		echo ""
-		echo " 	3.Lienol(my-19.07-full)_source"
+		echo " 	3.Lienol(dev-19.07)_source"
 		echo ""
 		echo "	4.openwrt17.1(stable version)_source"
 		echo ""
@@ -1111,7 +1139,7 @@ source_openwrt_Setting() {
 			cp $HOME/$OW/$file/lede/include/target.mk  $HOME/$OW/$file/lede/include/target.mk_back		
 		fi			
 
-		itdesk_default_packages="DEFAULT_PACKAGES:=base-files libc libgcc busybox dropbear mtd uci opkg netifd fstools uclient-fetch logd urandom-seed urngd block-mount coremark kmod-nf-nathelper kmod-nf-nathelper-extra kmod-ipt-raw wget libustream-openssl ca-certificates default-settings luci luci-proto-relay   luci-app-sqm  luci-app-adbyby-plus luci-app-autoreboot luci-app-filetransfer luci-app-vsftpd luci-app-ssr-plus luci-app-arpbind luci-app-vlmcsd luci-app-wol luci-app-ramfree luci-app-sfe luci-app-flowoffload luci-app-nlbwmon luci-app-accesscontrol  luci-app-ttyd luci-app-watchcat luci-app-wifischedule luci-app-netdata luci-app-syncdial luci-app-frpc ddns-scripts_aliyun ddns-scripts_dnspod"
+		itdesk_default_packages="DEFAULT_PACKAGES:=base-files libc libgcc busybox dropbear mtd uci opkg netifd fstools uclient-fetch logd urandom-seed urngd block-mount coremark kmod-nf-nathelper kmod-nf-nathelper-extra kmod-ipt-raw wget libustream-openssl ca-certificates default-settings luci luci-proto-relay   luci-app-sqm  luci-app-adbyby-plus luci-app-autoreboot luci-app-filetransfer luci-app-vsftpd luci-app-ssr-plus luci-app-arpbind luci-app-vlmcsd luci-app-wol luci-app-ramfree luci-app-sfe luci-app-flowoffload luci-app-nlbwmon luci-app-accesscontrol  luci-app-ttyd luci-app-watchcat luci-app-wifischedule luci-app-netdata  luci-app-frpc ddns-scripts_aliyun ddns-scripts_dnspod"
 	
 		lean_packages_nas="DEFAULT_PACKAGES.nas:=fdisk lsblk mdadm automount autosamba"	
 
@@ -1150,7 +1178,7 @@ source_openwrt_Setting() {
 		sed -i 's/16384/65536/g' package/kernel/linux/files/sysctl-nf-conntrack.conf
 
 		#删除lean_frp
-		rm -rf package/lean/frpc
+		rm -rf package/lean/frp
 		rm -rf package/lean/luci-app-frpc		
 				
 		#取消官方源码强制https
@@ -1160,28 +1188,6 @@ source_openwrt_Setting() {
 		sed -i '46s/\(.\{1\}\)/\#/' package/network/services/uhttpd/files/uhttpd.init
 		sed -i '47s/\(.\{1\}\)/\#/' package/network/services/uhttpd/files/uhttpd.init
 		sed -i '53s/\(.\{1\}\)/\#/' package/network/services/uhttpd/files/uhttpd.init
-
-
-		#默认选上v2
-		v2if=$(grep -o "#v2default y if x86_64" package/lean/luci-app-ssr-plus/Makefile | wc -l)
-		if [[ "$v2if" == "1" ]]; then
-			echo "v2设置完成"
-		else
-			sed -i '25s/\(.\{1\}\)/\#v2/' package/lean/luci-app-ssr-plus/Makefile
-			sed -i '25a\default y' package/lean/luci-app-ssr-plus/Makefile
-			sed -i "25s/^/        /" package/lean/luci-app-ssr-plus/Makefile
-			sed -i "26s/^/        /" package/lean/luci-app-ssr-plus/Makefile
-		fi
-
-		trojanif=$(grep -o "#tjdefault y if x86_64" package/lean/luci-app-ssr-plus/Makefile | wc -l)
-		if [[ "$trojanif" == "1" ]]; then
-			echo "Trojan设置完成"
-		else
-			sed -i '30s/\(.\{1\}\)/\#tj/' package/lean/luci-app-ssr-plus/Makefile
-			sed -i '30a\default y' package/lean/luci-app-ssr-plus/Makefile
-			sed -i "30s/^/        /" package/lean/luci-app-ssr-plus/Makefile
-			sed -i "31s/^/        /" package/lean/luci-app-ssr-plus/Makefile
-		fi
 		
 		#upx ucl 
 		if [[ $(grep -o "upx" tools/Makefile | wc -l)  == "1" ]]; then
@@ -1225,50 +1231,30 @@ source_lean() {
 		clear
 		echo -e ">>$green针对lean版本开始配置优化$white" && Time
 		
-		#target.mk	
-		sed -i "s/default-settings luci luci-app-ddns luci-app-sqm luci-app-upnp luci-app-adbyby-plus luci-app-autoreboot/default-settings luci-app-adbyby-plus luci-app-autoreboot luci-app-sqm/g" include/target.mk
-		sed -i "s/luci-app-pptp-server luci-app-arpbind luci-app-vlmcsd luci-app-wol luci-app-ramfree/luci-app-arpbind luci-app-vlmcsd luci-app-wol luci-app-ramfree/g" include/target.mk
-		sed -i "s/luci-app-sfe luci-app-flowoffload luci-app-nlbwmon luci-app-accesscontrol/luci-app-sfe luci-app-flowoffload luci-app-nlbwmon luci-app-accesscontrol luci-app-frpc luci-app-ttyd luci-app-watchcat luci-app-wifischedule luci-app-netdata luci-app-syncdial/g" include/target.mk
-		sed -i "s/luci-app-usb-printer/ /g" include/target.mk
-		sed -i "s/luci-app-ddns/ /g" include/target.mk
+		#target.mk
+		if [[ `grep -o "#tr_ok" include/target.mk | wc -l ` == "1" ]]; then
+			echo ""
+		else
+			sed -i "s/default-settings luci luci-app-ddns luci-app-upnp luci-app-adbyby-plus luci-app-autoreboot/default-settings luci luci-app-adbyby-plus luci-app-autoreboot luci-app-serverchan luci-app-diskman/g" include/target.mk
+
+			sed -i "s/luci-app-sfe luci-app-flowoffload luci-app-nlbwmon luci-app-accesscontrol luci-app-cpufreq/luci-app-sfe luci-app-flowoffload luci-app-nlbwmon luci-app-accesscontrol luci-app-cpufreq luci-app-frpc luci-app-ttyd luci-app-netdata #tr_ok/g" include/target.mk
+
+		fi	
 		
 		#x86_makefile
-		x86_makefile=" luci-proto-bonding luci-app-unblockmusic luci-app-transmission luci-app-aria2 luci-app-baidupcs-web uci-app-sqm  ddns-scripts_aliyun ddns-scripts_dnspod ca-certificates"
+		x86_makefile="luci-app-aria2 luci-app-baidupcs-web luci-app-dockerman luci-app-frps luci-app-hd-idle luci-app-kodexplorer"
 		if [[ `grep -o "$x86_makefile" target/linux/x86/Makefile ` == "$x86_makefile" ]]; then
 			echo -e "$green x86_makefile配置已经修改，不做其他操作$white"
 		else
-			sed -i "s/luci-app-zerotier luci-app-ipsec-vpnd luci-app-pptp-server luci-proto-bonding luci-app-unblockmusic luci-app-qbittorrent luci-app-v2ray-server luci-app-zerotier luci-app-xlnetacc ddns-scripts_aliyun ddns-scripts_dnspod ca-certificates/$x86_makefile/g" target/linux/x86/Makefile	
+			sed -i "s/luci-app-ipsec-vpnd luci-proto-bonding luci-app-unblockmusic luci-app-zerotier luci-app-xlnetacc/$x86_makefile/g" target/linux/x86/Makefile
 		fi
 
 		#ipq806_makefile
-		ipq806_makefile="luci-app-aria2 luci-app-baidupcs-web luci-app-unblockmusic fdisk e2fsprogs ca-certificates"
+		ipq806_makefile="luci-app-aria2 luci-app-baidupcs-web  luci-app-wifischedule fdisk e2fsprogs ca-certificates"
 		if [[ `grep -o "$ipq806_makefile" target/linux/ipq806x/Makefile` == "$ipq806_makefile" ]]; then
 			echo -e "$green 配置已经修改，不做其他操作$white"
 		else
 			sed -i "s/luci-app-ipsec-vpnd luci-app-unblockmusic luci-app-zerotier ca-certificates/$ipq806_makefile/g" target/linux/ipq806x/Makefile
-		fi
-
-		echo -e ">>$green lean版本配置优化完成$white"	
-
-		#默认选上v2
-		v2if=$(grep -o "#v2default y if x86_64" package/lean/luci-app-ssr-plus/Makefile | wc -l)
-		if [[ "$v2if" == "1" ]]; then
-			echo "v2设置完成"
-		else
-			sed -i '25s/\(.\{1\}\)/\#v2/' package/lean/luci-app-ssr-plus/Makefile
-			sed -i '25a\default y' package/lean/luci-app-ssr-plus/Makefile
-			sed -i "25s/^/        /" package/lean/luci-app-ssr-plus/Makefile
-			sed -i "26s/^/        /" package/lean/luci-app-ssr-plus/Makefile
-		fi
-
-		trojanif=$(grep -o "#tjdefault y if x86_64" package/lean/luci-app-ssr-plus/Makefile | wc -l)
-		if [[ "$trojanif" == "1" ]]; then
-			echo "Trojan设置完成"
-		else
-			sed -i '30s/\(.\{1\}\)/\#tj/' package/lean/luci-app-ssr-plus/Makefile
-			sed -i '30a\default y' package/lean/luci-app-ssr-plus/Makefile
-			sed -i "30s/^/        /" package/lean/luci-app-ssr-plus/Makefile
-			sed -i "31s/^/        /" package/lean/luci-app-ssr-plus/Makefile
 		fi
 		
 		#替换lean首页文件，添加天气代码(by:冷淡)
@@ -1301,7 +1287,22 @@ source_lean() {
 			sed -i '$a msgstr "本地天气"' feeds/luci/modules/luci-base/po/zh-cn/base.po
 		fi
 	fi
+		#下载一下微信推送插件
+		if [[ -e package/other-plugins/luci-app-serverchan ]]; then
+			cd  package/other-plugins/luci-app-serverchan
+			git pull
+			cd $HOME/$OW/$file/lede/
+		else
+			mkdir package/other-plugins
+			git clone https://github.com/tty228/luci-app-serverchan.git package/other-plugins/luci-app-serverchan
+		fi
+
+		#将diskman选项启用
+		sed -i "s/default n/default y/g" package/lean/luci-app-diskman/Makefile
+
+		echo -e ">>$green lean版本配置优化完成$white"	
 }
+
 
 source_lean_package() {
 	echo ""
@@ -1404,11 +1405,37 @@ source_Setting_Public() {
 	#frpc替换为27版本
 	source_type=`cat "$HOME/$OW/$SF/tmp/source_type"`
 	if [[ `echo "$source_type" | grep openwrt | wc -l` == "1" ]]; then
-		sed -i "s/PKG_VERSION:=0.31.1/PKG_VERSION:=0.27.0/g" feeds/packages/net/frp/Makefile
+		sed -i "s/PKG_VERSION:=0.31.2/PKG_VERSION:=0.27.0/g" feeds/packages/net/frp/Makefile
+	elif [[ `echo "$source_type" | grep lean | wc -l` == "1" ]]; then
+		sed -i "s/PKG_VERSION:=0.32.0/PKG_VERSION:=0.27.0/g" package/lean/frp/Makefile
+		sed -i "s/PKG_HASH:=39162780b28c0019207d83919530b573fac0bef8df30f1b6a5860886b0616c67/PKG_HASH:=5d2efd5d924c7a7f84a9f2838de6ab9b7d5ca070ab243edd404a5ca80237607c/g" package/lean/frp/Makefile
 	else
-		sed -i "s/PKG_VERSION:=0.31.1/PKG_VERSION:=0.27.0/g" package/lean/frpc/Makefile
+		echo ""
 	fi
 
+:<<'COMMENT'
+	#默认选上v2
+	v2if=$(grep -o "#v2default y if x86_64" package/lean/luci-app-ssr-plus/Makefile | wc -l)
+	
+	if [[ "$v2if" == "1" ]]; then
+		echo "v2设置完成"
+	else
+		sed -i '26s/\(.\{1\}\)/\#v2/' package/lean/luci-app-ssr-plus/Makefile
+		sed -i '26a\default y' package/lean/luci-app-ssr-plus/Makefile
+		sed -i "26s/^/        /" package/lean/luci-app-ssr-plus/Makefile
+		sed -i "27s/^/        /" package/lean/luci-app-ssr-plus/Makefile
+	fi
+
+	trojanif=$(grep -o "#tjdefault y if x86_64" package/lean/luci-app-ssr-plus/Makefile | wc -l)
+	if [[ "$trojanif" == "1" ]]; then
+		echo "Trojan设置完成"
+	else
+		sed -i '31s/\(.\{1\}\)/\#tj/' package/lean/luci-app-ssr-plus/Makefile
+		sed -i '31a\default y' package/lean/luci-app-ssr-plus/Makefile
+		sed -i "31s/^/        /" package/lean/luci-app-ssr-plus/Makefile
+		sed -i "32s/^/        /" package/lean/luci-app-ssr-plus/Makefile
+	fi
+COMMENT
 	echo -e ">>$green Public配置完成$white"	
 }
 
@@ -1461,7 +1488,8 @@ dl_download() {
 	echo "ps：全速下载可能会导致系统反应慢点，稍等一下就好"	
 	echo "----------------------------------------------"
 	Time	
-	make download -j$cpu_cores V=s		
+	make download -j$cpu_cores V=s
+	dl_error
 }
 
 dl_error() {
@@ -1476,7 +1504,7 @@ dl_error() {
 		dl_download
 		;;
 		2)
-		ecc
+		echo ""
 		;;
 		*)
 		clear && echo  "Error请输入正确的数字 [1-2]" && Time
@@ -1517,6 +1545,7 @@ make_firmware_or_plugin() {
 	echo "请选择编译固件 OR 编译插件"
 	echo " 1.编译固件"
 	echo " 2.编译插件"
+	echo " 3.回退到加载配置选项（可以重新选择你的配置）"
 	echo "----------------------------------------"
 	read -p "请输入你的决定：" mk_value
 	case "$mk_value" in
@@ -1525,6 +1554,9 @@ make_firmware_or_plugin() {
 		;;
 		2)
 		make_Compile_plugin
+		;;
+		3)
+		source_config
 		;;
 		*)
 		clear && echo  "Error请输入正确的数字 [1-2]" && Time
@@ -1558,31 +1590,43 @@ make_compile_firmware() {
 		$mk_f
 	fi
 	
-	endtime=`date +'%Y-%m-%d %H:%M:%S'`
-	start_seconds=$(date --date="$starttime" +%s);
-	end_seconds=$(date --date="$endtime" +%s);
-	echo "本次运行时间： "$((end_seconds-start_seconds))"s"
+	if [[ $? -eq 0 ]]; then
+		endtime=`date +'%Y-%m-%d %H:%M:%S'`
+		start_seconds=$(date --date="$starttime" +%s);
+		end_seconds=$(date --date="$endtime" +%s);
+		echo "本次运行时间： "$((end_seconds-start_seconds))"s"
+	else
+		echo -e "$red>> 固件编译失败，请查询上面报错代码$white"
+		make_continue_to_compile
+	fi
    	if_wo
 	#by：BoomLee  ITdesk
 }
 
 if_wo() {
-	#复制编译好的固件过去
-        workspace_if=`echo $HOME | grep workspace | wc -l `
-    	if [[ "$workspace_if" == "1" ]]; then
-		da=`date +%Y%m%d`
-		HOME=`echo "$THEIA_WORKSPACE_ROOT"`
-       		source_type=`cat $HOME/$OW/$SF/tmp/source_type`
-        	you_file=`cat $HOME/$OW/$SF/tmp/you_file`
-		if [[ -e $HOME/bin ]]; then
-			echo ""
-		else
-			mkdir -p $HOME/bin
-        fi
-        	cd && cd $HOME
-		\cp -rf $HOME/$OW/$you_file/lede/bin/targets/  $HOME/bin/$da-$source_type
-		echo -e "本次编译完成的固件已经copy到$green $HOME/bin/$da-$source_type $white"
-        fi
+	if [[ $? -eq 0 ]]; then
+		#复制编译好的固件过去
+		workspace_if=`echo $HOME | grep workspace | wc -l `
+		if [[ "$workspace_if" == "1" ]]; then
+			da=`date +%Y%m%d`
+			HOME=`echo "$THEIA_WORKSPACE_ROOT"`
+			source_type=`cat $HOME/$OW/$SF/tmp/source_type`
+			you_file=`cat $HOME/$OW/$SF/tmp/you_file`
+
+			if [[ -e $HOME/bin ]]; then
+				echo ""
+			else
+				mkdir -p $HOME/bin
+			fi
+
+			cd && cd $HOME
+			\cp -rf $HOME/$OW/$you_file/lede/bin/targets/  $HOME/bin/$da-$source_type
+			echo -e "本次编译完成的固件已经copy到$green $HOME/bin/$da-$source_type $white"
+		fi
+	else
+		echo -e "$red>> 固件编译失败，请查询上面报错代码$white"
+		make_continue_to_compile
+	fi
 }
 
 make_Compile_plugin() {
@@ -1599,21 +1643,27 @@ make_Compile_plugin() {
 		echo -e "你输入的参数是：$green$mk_p$white"
 		echo "准备开始执行编译" && Time
 		$mk_p
-	echo ""
-	echo "" 
-	echo "---------------------------------------------------------------------"
-	echo ""
-	echo -e "  潘多拉编译完成的插件在$yellow/Openwrt/文件名/lede/bin/packages/你的平台/base$white,如果还是找不到的话，看下有没有报错，善用搜索 "
-	echo ""
-	echo "回车可以继续编译插件，或者Ctrl + c终止操作"
-	echo ""
-	echo "---------------------------------------------------------------------"	
-	read a
-	make_Continue_compiling_the_plugin
-	endtime=`date +'%Y-%m-%d %H:%M:%S'`
-	start_seconds=$(date --date="$starttime" +%s);
-	end_seconds=$(date --date="$endtime" +%s);
-	echo "本次运行时间： "$((end_seconds-start_seconds))"s"
+	
+	if [[ $? -eq 0 ]]; then
+		echo ""
+		echo ""
+		echo "---------------------------------------------------------------------"
+		echo ""
+		echo -e "  潘多拉编译完成的插件在$yellow/Openwrt/文件名/lede/bin/packages/你的平台/base$white,如果还是找不到的话，看下有没有报错，善用搜索 "
+		echo ""
+		echo "回车可以继续编译插件，或者Ctrl + c终止操作"
+		echo ""
+		echo "---------------------------------------------------------------------"
+			read a
+			make_Continue_compiling_the_plugin
+			endtime=`date +'%Y-%m-%d %H:%M:%S'`
+			start_seconds=$(date --date="$starttime" +%s);
+			end_seconds=$(date --date="$endtime" +%s);
+			echo "本次运行时间： "$((end_seconds-start_seconds))"s"
+		else
+			echo -e "$red>> 固件编译失败，请查询上面报错代码$white"
+			make_continue_to_compile
+		fi
 	#by：BoomLee  ITdesk
 }
 
@@ -1630,7 +1680,7 @@ make_Continue_compiling_the_plugin() {
 		make_Compile_plugin
 		;;
 		2)
-		echo ""
+		exit
 		;;
 		*)
 		clear && echo  "Error请输入正确的数字 [1-2]" && Time
@@ -1638,6 +1688,36 @@ make_Continue_compiling_the_plugin() {
 		;;
 	esac
 }
+
+make_continue_to_compile() {
+	echo "---------------------------------------------------------------------"
+	echo -e "你的编译出错了是否要继续编译"
+	echo ""
+	echo -e "$green 1.是（回到编译固件 OR 编译插件界面，直接选择编译固件还是插件即可）$white"
+	echo ""
+	echo -e "$red 2.否 （直接退出脚本）$white"
+	echo ""
+	echo -e "$yellow 3.回到配置加载（回到之前选择配置界面，重新选择配置或者取消某些包来完成编译）$white"
+	echo "---------------------------------------------------------------------"
+	read  -p "请输入你的决定:" continue_to_compile
+		case "$continue_to_compile" in
+		1)
+		cd $HOME/$OW/$file/lede
+		make_firmware_or_plugin
+		;;
+		2)
+		exit
+		;;
+		3)
+		source_config
+		;;
+		*)
+		clear && echo  "Error请输入正确的数字 [1-3]" && Time
+		clear && make_continue_to_compile
+		;;
+	esac
+}
+
 
 description_if
 
