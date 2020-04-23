@@ -14,11 +14,46 @@ green="\033[32m"
 yellow="\033[33m"
 white="\033[0m"
 
+prompt() {
+	echo  -e " $yellow温馨提示，最近的编译依赖有变动，如果你最近一直编译失败，建议使用脚本5.其他选项 --- 1.只搭建编译环境功能 $white"
+}
+
+source_make_clean() {
+	clear
+	echo "--------------------------------------------------------"
+	echo -e "$green++是否执行make clean清理固件++$white"
+	echo ""
+	echo "  1.执行make clean"
+	echo ""
+	echo "  2.不执行make clean"
+	echo ""
+	echo -e "$yellow  温馨提醒make clean会清理掉之前编译的固件，为了编译成功 $white"
+	echo -e "$yellow率建议执行make clean，虽然编译时间会比较久$white"
+	echo "--------------------------------------------------------"
+	read  -p "请输入你的参数(回车默认：make clean)：" mk_c
+	if [[ -z "$mk_c" ]];then
+		clear && echo -e "$green开始执行make clean $white"
+		make clean
+	else
+		case "$mk_c" in
+		1)
+		clear && echo -e "$green开始执行make clean $white"
+		make clean
+		;;
+		2)
+		clear && echo -e "$green不执行make clean $white"
+		;;
+		*)
+		clear && echo  "Error请输入正确的数字 [1-2]" && Time
+		 clear && source_make_clean
+		;;
+	esac
+	fi
+
+}
+
 rely_on() {
-	sudo apt-get -y install asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache flex \
-g++ gawk gcc gcc-multilib gettext git git-core help2man htop lib32gcc1 libc6-dev-i386 libglib2.0-dev libncurses5-dev \
-libssl-dev libtool libz-dev libelf-dev make msmtp ncurses-term ocaml-nox p7zip p7zip-full patch qemu-utils sharutils \
-subversion texinfo uglifyjs unzip upx xmlto yui-compressor zlib1g-dev make cmake device-tree-compiler  g++-multilib  python3.5  
+	sudo apt-get -y install build-essential asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev patch python3.5 unzip zlib1g-dev lib32gcc1 libc6-dev-i386 subversion flex uglifyjs git-core gcc-multilib p7zip p7zip-full msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint device-tree-compiler g++-multilib antlr3 gperf bison g++ gcc help2man htop ncurses-term ocaml-nox sharutils yui-compressor make cmake 
 }
 
 #显示编译文件夹
@@ -149,7 +184,7 @@ dl_other() {
 
 update_lean_package() {
 	ls_file_luci
-	make clean
+	source_make_clean
 	rm -rf package/lean
 	source_openwrt_Setting
 	echo "插件下载完成"
@@ -299,7 +334,7 @@ source_secondary_compilation() {
 			source_secondary_compilation
 		fi
 		echo "开始清理之前的文件"
-		make clean && rm -rf ./tmp && Time
+		source_make_clean && rm -rf ./tmp && Time
 		if [[ `grep -o "PandoraBox" .config | wc -l` == "2" ]]; then
 				echo "检测到PandoraBox源码，开始更新"				
 				rm -rf package/lean && rm -rf ./feeds
@@ -806,6 +841,10 @@ main_interface() {
 		9)
 		update_script
 		;;
+		99)
+		cd $HOME/$OW/lean/lede/
+		n1_builder
+		;;
 		0)
 		exit
 		;;
@@ -836,17 +875,24 @@ system_install() {
 
 update_system() {
 	clear
-	clear && echo "准备更新系统"	&& Time
+	clear && echo -e "$green >>准备更新系统 $white"	&& Time
 	sudo apt-get update
 	clear
-	echo "准备安装依赖" && Time
-	rely_on
-	if [[ $? -eq 0 ]]; then
-		echo "安装完成" && Time
+	javahome=`echo "$JAVA_HOME" | grep gitpod | wc -l`
+	if [[ "$javahome" == "1" ]]; then
+		clear
+		echo -e "$green >>检测到你是gitpod云编译主机，不需要安装依赖，直接创建文件夹即可 $white" && Time
+		create_file
 	else
-		clear	
-		echo "依赖没有更新或安装成功，重新执行代码" && Time
-		update_system
+		echo -e "$green >>准备安装依赖 $white" && Time
+		rely_on
+		if [[ $? -eq 0 ]]; then
+			echo -e "$green >>安装完成 $white" && Time
+		else
+			clear
+			echo "$red 依赖没有更新或安装成功，重新执行代码 $white" && Time
+			update_system
+		fi
 	fi
 }
 
@@ -1008,8 +1054,10 @@ source_download_if() {
 			cd $HOME/$OW/$file/lede
 			source_if
 			source_Soft_link
-			source_openwrt			
 			update_feeds
+			source_openwrt
+			source_lean
+			source_lienol
 			source_Setting_Public
 			make_defconfig
 		else
@@ -1020,52 +1068,18 @@ source_download_if() {
 		fi
 }
 
-source_Soft_link() {		
-		#1
-		if [[ -e $HOME/$OW/$SF/description ]]; then
-			echo ""
-		else
-			description >> $HOME/$OW/$SF/description
-		fi
-
-		#2		
-		if [[ -e $HOME/$OW/$file/lede/dl ]]; then
-			echo ""
-		else
-			ln -s  $HOME/$OW/$SF/dl $HOME/$OW/$file/lede/dl
-		fi
-	
-		#3
-		if [[ -e $HOME/$OW/$file/lede/My_config ]]; then
-			echo ""
-		else
-			ln -s  $HOME/$OW/$SF/My_config $HOME/$OW/$file/lede/My_config
-		fi
-
-		#4
-		if [[ -e $HOME/$OW/$file/lede/openwrt.sh ]]; then
-			echo ""
-		else
-			ln -s  $HOME/$OW/$SF/$OCS/openwrt.sh $HOME/$OW/$file/lede/openwrt.sh
-		fi
-		
-}
-
 source_if() {
 		#检测源码属于那个版本
 		source_git_branch=$(git branch | sed 's/* //g')
 		if [[ `git remote -v | grep -o https://github.com/openwrt/openwrt.git | wc -l` == "2" ]]; then
+			echo "openwrt" > $HOME/$OW/$SF/tmp/source_type
 			if [[ $source_git_branch == "lede-17.01" ]]; then
-				echo "openwrt" > $HOME/$OW/$SF/tmp/source_type
 				echo "lede-17.01" > $HOME/$OW/$SF/tmp/source_branch
 			elif [[ $source_git_branch == "openwrt-18.06" ]]; then
-				echo "openwrt" > $HOME/$OW/$SF/tmp/source_type
 				echo "openwrt-18.06" > $HOME/$OW/$SF/tmp/source_branch
 			elif [[ $source_git_branch == "openwrt-19.07" ]]; then
-				echo "openwrt" > $HOME/$OW/$SF/tmp/source_type
 				echo "openwrt-19.07" > $HOME/$OW/$SF/tmp/source_branch
 			elif [[ $source_git_branch == "master" ]]; then
-				echo "openwrt" > $HOME/$OW/$SF/tmp/source_type
 				echo "master" > $HOME/$OW/$SF/tmp/source_branch
 			fi
 		elif [[ `git remote -v | grep -o https://github.com/coolsnowwolf/lede.git | wc -l` == "2" ]]; then
@@ -1090,6 +1104,39 @@ source_if() {
 		fi 
 }
 
+
+source_Soft_link() {
+		#1
+		if [[ -e $HOME/$OW/$SF/description ]]; then
+			echo ""
+		else
+			description >> $HOME/$OW/$SF/description
+		fi
+
+		#2
+		if [[ -e $HOME/$OW/$file/lede/dl ]]; then
+			echo ""
+		else
+			ln -s  $HOME/$OW/$SF/dl $HOME/$OW/$file/lede/dl
+		fi
+
+		#3
+		if [[ -e $HOME/$OW/$file/lede/My_config ]]; then
+			echo ""
+		else
+			ln -s  $HOME/$OW/$SF/My_config $HOME/$OW/$file/lede/My_config
+		fi
+
+		#4
+		if [[ -e $HOME/$OW/$file/lede/openwrt.sh ]]; then
+			echo ""
+		else
+			ln -s  $HOME/$OW/$SF/$OCS/openwrt.sh $HOME/$OW/$file/lede/openwrt.sh
+		fi
+
+}
+
+
 source_openwrt() {
 		clear
 		source_type=`cat "$HOME/$OW/$SF/tmp/source_type"`
@@ -1104,6 +1151,7 @@ source_openwrt() {
 					1)
 					rm -rf package/lean 
 					source_openwrt_Setting
+					source_lean_package
 					;;
 					2)
 					echo ""
@@ -1231,26 +1279,33 @@ source_lean() {
 		clear
 		echo -e ">>$green针对lean版本开始配置优化$white" && Time
 		
+		sed -i "s/#src-git helloworld/src-git helloworld/g" feeds.conf.default 
+		update_feeds
+
 		#target.mk
 		if [[ `grep -o "#tr_ok" include/target.mk | wc -l ` == "1" ]]; then
 			echo ""
 		else
-			sed -i "s/default-settings luci luci-app-ddns luci-app-upnp luci-app-adbyby-plus luci-app-autoreboot/default-settings luci luci-app-adbyby-plus luci-app-autoreboot luci-app-serverchan luci-app-diskman/g" include/target.mk
+			sed -i "s/default-settings luci luci-app-ddns luci-app-upnp luci-app-adbyby-plus luci-app-autoreboot/default-settings luci luci-app-adbyby-plus luci-app-autoreboot luci-app-serverchan luci-app-diskman luci-app-passwall luci-app-fileassistant/g" include/target.mk
 
-			sed -i "s/luci-app-sfe luci-app-flowoffload luci-app-nlbwmon luci-app-accesscontrol luci-app-cpufreq/luci-app-sfe luci-app-flowoffload luci-app-nlbwmon luci-app-accesscontrol luci-app-cpufreq luci-app-frpc luci-app-ttyd luci-app-netdata #tr_ok/g" include/target.mk
+			sed -i "s/luci-app-sfe luci-app-flowoffload luci-app-nlbwmon luci-app-accesscontrol luci-app-cpufreq/luci-app-sfe luci-app-flowoffload luci-app-nlbwmon luci-app-accesscontrol luci-app-frpc luci-app-ttyd luci-app-netdata #tr_ok/g" include/target.mk
 
 		fi	
 		
 		#x86_makefile
-		x86_makefile="luci-app-aria2 luci-app-baidupcs-web luci-app-dockerman luci-app-frps luci-app-hd-idle luci-app-kodexplorer"
+		x86_makefile="luci-app-aria2 luci-app-baidupcs-web luci-app-frps luci-app-hd-idle luci-app-kodexplorer luci-app-cifs-mount"
 		if [[ `grep -o "$x86_makefile" target/linux/x86/Makefile ` == "$x86_makefile" ]]; then
 			echo -e "$green x86_makefile配置已经修改，不做其他操作$white"
 		else
 			sed -i "s/luci-app-ipsec-vpnd luci-proto-bonding luci-app-unblockmusic luci-app-zerotier luci-app-xlnetacc/$x86_makefile/g" target/linux/x86/Makefile
+
+			sed -i "s/luci-app-openvpn-server//g" target/linux/x86/Makefile
+			sed -i "s/luci-app-music-remote-center//g" target/linux/x86/Makefile
+			sed -i "s/luci-app-airplay2//g" target/linux/x86/Makefile
 		fi
 
 		#ipq806_makefile
-		ipq806_makefile="luci-app-aria2 luci-app-baidupcs-web  luci-app-wifischedule fdisk e2fsprogs ca-certificates"
+		ipq806_makefile="luci-app-aria2 luci-app-baidupcs-web luci-app-wifischedule luci-app-amule luci-app-cifs-mount fdisk e2fsprogs ca-certificates"
 		if [[ `grep -o "$ipq806_makefile" target/linux/ipq806x/Makefile` == "$ipq806_makefile" ]]; then
 			echo -e "$green 配置已经修改，不做其他操作$white"
 		else
@@ -1295,6 +1350,65 @@ source_lean() {
 		else
 			mkdir package/other-plugins
 			git clone https://github.com/tty228/luci-app-serverchan.git package/other-plugins/luci-app-serverchan
+		fi
+
+		if [[ -e package/other-plugins/luci-app-passwall ]]; then
+			#**默认选上tj
+			trojanif=$(grep -o "#tjdefault n" package/other-plugins/luci-app-passwall/Makefile | wc -l)
+			if [[ "$trojanif" == "1" ]]; then
+				echo "Trojan设置完成"
+			else
+				sed -i '46s/\(.\{1\}\)/\#tj/' package/other-plugins/luci-app-passwall/Makefile
+				sed -i '46a\default y' package/other-plugins/luci-app-passwall/Makefile
+				sed -i "46s/^/        /" package/other-plugins/luci-app-passwall/Makefile
+				sed -i "47s/^/        /" package/other-plugins/luci-app-passwall/Makefile
+			fi
+
+			#更改**国内的dns
+			passwall_dns=$(grep -o "option up_china_dns 'default'" package/other-plugins/luci-app-passwall/root/etc/config/passwall | wc -l)
+			if [[ "$passwall_dns" == "1" ]]; then
+				sed -i "s/option up_china_dns 'default'/option up_china_dns '223.5.5.5'/g" package/other-plugins/luci-app-passwall/root/etc/config/passwall
+			fi
+
+			#更改**的dns模式
+			dns_mode=$(grep -o "option dns_mode 'pdnsd'" package/other-plugins/luci-app-passwall/root/etc/config/passwall | wc -l)
+			if [[ "$dns_mode" == "1" ]]; then
+				sed -i "s/option dns_mode 'pdnsd'/option dns_mode 'chinadns-ng'/g" package/other-plugins/luci-app-passwall/root/etc/config/passwall
+			fi
+
+			#更改**显示位置
+			passwall_display=$(grep -o "vpn" package/other-plugins/luci-app-passwall/luasrc/controller/passwall.lua | wc -l)
+			if [[ "$passwall_display" == "0" ]]; then
+				echo ""
+			else
+				sed -i "s/vpn/services/g" package/other-plugins/luci-app-passwall/luasrc/controller/passwall.lua
+				sed -i "s/VPN/Services/g" package/other-plugins/luci-app-passwall/luasrc/controller/passwall.lua
+				sed -i "s/vpn/services/g" package/other-plugins/luci-app-passwall/luasrc/model/cbi/passwall/node_config.lua
+				sed -i "s/vpn/services/g" package/other-plugins/luci-app-passwall/luasrc/model/cbi/passwall/node_list.lua
+				sed -i "s/vpn/services/g" package/other-plugins/luci-app-passwall/luasrc/model/cbi/passwall/node_subscribe.lua
+				sed -i "s/vpn/services/g" package/other-plugins/luci-app-passwall/luasrc/view/passwall/haproxy/status.htm
+				sed -i "s/vpn/services/g" package/other-plugins/luci-app-passwall/luasrc/view/passwall/log/log.htm
+				sed -i "s/vpn/services/g" package/other-plugins/luci-app-passwall/luasrc/view/passwall/global/tips.htm
+				sed -i "s/vpn/services/g" package/other-plugins/luci-app-passwall/luasrc/view/passwall/global/status.htm
+				sed -i "s/vpn/services/g" package/other-plugins/luci-app-passwall/luasrc/view/passwall/global/status2.htm
+				sed -i "s/vpn/services/g" package/other-plugins/luci-app-passwall/luasrc/view/passwall/node_list/node_list.htm
+				sed -i "s/vpn/services/g" package/other-plugins/luci-app-passwall/luasrc/view/passwall/node_list/link_add_node.htm
+				sed -i "s/vpn/services/g" package/other-plugins/luci-app-passwall/luasrc/view/passwall/rule/rule_version.htm
+				sed -i "s/vpn/services/g" package/other-plugins/luci-app-passwall/luasrc/view/passwall/rule/brook_version.htm
+				sed -i "s/vpn/services/g" package/other-plugins/luci-app-passwall/luasrc/view/passwall/rule/v2ray_version.htm
+				sed -i "s/vpn/services/g" package/other-plugins/luci-app-passwall/luasrc/view/passwall/rule/kcptun_version.htm
+				sed -i "s/vpn/services/g" package/other-plugins/luci-app-passwall/luasrc/view/passwall/rule/passwall_version.htm
+			fi
+		else
+			echo ""
+		fi
+
+		#下载lienol的fileassistant
+		if [[ -e package/other-plugins/luci-app-fileassistant ]]; then
+			rm -rf   package/other-plugins/luci-app-fileassistant
+			svn checkout https://github.com/Lienol/openwrt-package/trunk/lienol/luci-app-fileassistant package/other-plugins/luci-app-fileassistant
+		else
+			svn checkout https://github.com/Lienol/openwrt-package/trunk/lienol/luci-app-fileassistant package/other-plugins/luci-app-fileassistant
 		fi
 
 		#将diskman选项启用
@@ -1358,7 +1472,7 @@ source_lienol() {
 		fi
 
 		echo -e ">>$green lean版本配置优化完成$white"	
-
+:<<'COMMENT'
 		#默认选上tj
 		trojanif=$(grep -o "#tjdefault n" feeds/lienol/lienol/luci-app-passwall/Makefile | wc -l)
 		if [[ "$trojanif" == "1" ]]; then
@@ -1370,22 +1484,18 @@ source_lienol() {
 			sed -i "46s/^/        /" feeds/lienol/lienol/luci-app-passwall/Makefile
 		fi
 
-		#更改passwall的dns
+		#更改passwall国内的dns
 		passwall_dns=$(grep -o "option up_china_dns '114.114.114.114'" feeds/lienol/lienol/luci-app-passwall/root/etc/config/passwall | wc -l)
 		if [[ "$passwall_dns" == "1" ]]; then
 			sed -i "s/option up_china_dns '114.114.114.114'/option up_china_dns '223.5.5.5'/g" feeds/lienol/lienol/luci-app-passwall/root/etc/config/passwall
 		fi
-	
-		#更改passwall显示位置
-		passwall_display=$(grep -o "vpn" feeds/lienol/lienol/luci-app-passwall/luasrc/controller/passwall.lua | wc -l)	
-		if [[ "$passwall_display" == "0" ]]; then
-			echo ""
-		else
-			sed -i "s/vpn/services/g" feeds/lienol/lienol/luci-app-passwall/luasrc/controller/passwall.lua
-			sed -i "s/VPN/services/g" feeds/lienol/lienol/luci-app-passwall/luasrc/controller/passwall.lua
-		fi	
 
-
+		#更改passwall的dns模式
+		dns_mode=$(grep -o "option dns_mode 'pdnsd'" feeds/lienol/lienol/luci-app-passwall/root/etc/config/passwall | wc -l)
+		if [[ "$dns_mode" == "1" ]]; then
+			sed -i "s/option dns_mode 'pdnsd'/option dns_mode 'chinadns-ng'/g" feeds/lienol/lienol/luci-app-passwall/root/etc/config/passwall
+		fi
+COMMENT
 	fi
 }
 
@@ -1407,8 +1517,8 @@ source_Setting_Public() {
 	if [[ `echo "$source_type" | grep openwrt | wc -l` == "1" ]]; then
 		sed -i "s/PKG_VERSION:=0.31.2/PKG_VERSION:=0.27.0/g" feeds/packages/net/frp/Makefile
 	elif [[ `echo "$source_type" | grep lean | wc -l` == "1" ]]; then
-		sed -i "s/PKG_VERSION:=0.32.0/PKG_VERSION:=0.27.0/g" package/lean/frp/Makefile
-		sed -i "s/PKG_HASH:=39162780b28c0019207d83919530b573fac0bef8df30f1b6a5860886b0616c67/PKG_HASH:=5d2efd5d924c7a7f84a9f2838de6ab9b7d5ca070ab243edd404a5ca80237607c/g" package/lean/frp/Makefile
+		sed -i "s/PKG_VERSION:=0.32.1/PKG_VERSION:=0.27.0/g" package/lean/frp/Makefile
+		sed -i "s/PKG_HASH:=3a6ef59163f5a1d41b67908269e924000a8ccb2984e4bdfc18bd1405b5dbaf22/PKG_HASH:=5d2efd5d924c7a7f84a9f2838de6ab9b7d5ca070ab243edd404a5ca80237607c/g" package/lean/frp/Makefile
 	else
 		echo ""
 	fi
@@ -1581,6 +1691,7 @@ make_compile_firmware() {
 	read  -p "请输入你的参数(回车默认：make V=s)：" mk_f
 	if [[ -z "$mk_f" ]];then
 		clear && echo "开始执行编译" && Time
+		dl_download
 		make V=s
 	else
 		dl_download
@@ -1591,6 +1702,8 @@ make_compile_firmware() {
 	fi
 	
 	if [[ $? -eq 0 ]]; then
+		n1_builder
+		if_wo
 		endtime=`date +'%Y-%m-%d %H:%M:%S'`
 		start_seconds=$(date --date="$starttime" +%s);
 		end_seconds=$(date --date="$endtime" +%s);
@@ -1599,7 +1712,6 @@ make_compile_firmware() {
 		echo -e "$red>> 固件编译失败，请查询上面报错代码$white"
 		make_continue_to_compile
 	fi
-   	if_wo
 	#by：BoomLee  ITdesk
 }
 
@@ -1628,6 +1740,56 @@ if_wo() {
 		make_continue_to_compile
 	fi
 }
+
+n1_builder() {
+	if [[ -e $HOME/$OW/$SF/n1 ]]; then
+		echo ""
+	else
+		mkdir $HOME/$OW/$SF/n1
+		n1_builder
+	fi
+
+	builder_patch="$HOME/$OW/$SF/n1/PHICOMM-N1-OpenWRT-Image-Builder"
+	if [[ -e bin/targets/armvirt/64/[$(date +%Y%m%d)]-openwrt-armvirt-64-default-rootfs.tar.gz ]]; then
+		echo -e "$green >>检测到N1固件，自动制作N1的OpenWRT镜像$white" && Time
+		if [[ -e $builder_patch ]]; then
+			cd  $builder_patch
+			git pull
+			cd $HOME/$OW/$file/lede/
+		else
+			git clone https://github.com/sean-liang/PHICOMM-N1-OpenWRT-Image-Builder $builder_patch
+		fi
+
+		if [[ -e $builder_patch/armbian.img ]]; then
+			echo -e "$green >>armbin.img存在，复制固件$white"
+			if [[ -e $builder_patch/openwrt.img ]]; then
+				rm -rf $builder_patch/openwrt.img
+				cp bin/targets/armvirt/64/[$(date +%Y%m%d)]-openwrt-armvirt-64-default-rootfs.tar.gz $builder_patchopenwrt.img
+			else
+				cp bin/targets/armvirt/64/[$(date +%Y%m%d)]-openwrt-armvirt-64-default-rootfs.tar.gz $builder_patch/openwrt.img
+			fi
+
+			bash $builder_patch/build.sh
+				if [[ $? -eq 0 ]]; then
+					cp $builder_patch/n1-firmware.img.gz bin/targets/armvirt/64/n1-firmware.img.gz
+					echo -e "$green >>N1镜像制作完成,你的固件在：bin/targets/armvirt/64/n1-firmware.img.gz$white"
+				else
+					echo "$red >>N1固件制作失败，重新执行代码 $white" && Time
+					n1_builder
+				fi
+
+		else
+			echo -e "$yellow >>检查到没有armbin.img,请将你的armbin镜像放到：$builder_patch $white"
+			echo -e "$green >>存放完成以后，回车继续制作N1固件$white"
+			read a
+			n1_builder
+		fi
+
+	else
+		echo ""
+	fi
+}
+
 
 make_Compile_plugin() {
 	clear
@@ -1698,6 +1860,8 @@ make_continue_to_compile() {
 	echo -e "$red 2.否 （直接退出脚本）$white"
 	echo ""
 	echo -e "$yellow 3.回到配置加载（回到之前选择配置界面，重新选择配置或者取消某些包来完成编译）$white"
+	echo ""
+		prompt
 	echo "---------------------------------------------------------------------"
 	read  -p "请输入你的决定:" continue_to_compile
 		case "$continue_to_compile" in
