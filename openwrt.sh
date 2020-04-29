@@ -1,5 +1,5 @@
 #!/bin/bash
-set -u
+#set -u
 
 version="2.9"
 SF="Script_File"
@@ -68,13 +68,10 @@ ls_file_luci(){
 	ls_file
 	read -p "请输入你的文件夹（记得区分大小写）：" file
 	if [[ -e $HOME/$OW/$SF/tmp ]]; then
-		echo ""
+		echo "$file" > $HOME/$OW/$SF/tmp/you_file
 	else
 		mkdir -p $HOME/$OW/$SF/tmp	
 	fi
-	
-	echo "$file" > $HOME/$OW/$SF/tmp/you_file
-	cd && cd $HOME/$OW/$file/lede
 }
 
 #显示config文件夹
@@ -573,13 +570,13 @@ description_if(){
    	cd
 	clear
 	echo "开始检测系统"
-	curl -I -m 2 -s -w "%{http_code}\n" -o /dev/null  www.baidu.com
-	if [[ "$?" == "0" ]]; then
-		clear && echo -e  "$green已经安装curl$white"
-	else
+	curl_if=$(dpkg -l | grep -o "curl" |sed -n '1p' | wc -l)
+	if [[ "$curl_if" == "0" ]]; then
 		clear && echo "安装一下脚本用的依赖（注：不是openwrt的依赖而是脚本本身）"
 		sudo apt update
 		sudo apt install curl -y
+	else
+		clear && echo -e  "$green已经安装curl$white"
 	fi
 
 	#添加hosts(解决golang下载慢的问题)
@@ -1288,7 +1285,7 @@ source_lean() {
 		else
 			sed -i "s/default-settings luci luci-app-ddns luci-app-upnp luci-app-adbyby-plus luci-app-autoreboot/default-settings luci luci-app-adbyby-plus luci-app-autoreboot luci-app-serverchan luci-app-diskman luci-app-passwall luci-app-fileassistant/g" include/target.mk
 
-			sed -i "s/luci-app-sfe luci-app-flowoffload luci-app-nlbwmon luci-app-accesscontrol luci-app-cpufreq/luci-app-sfe luci-app-flowoffload luci-app-nlbwmon luci-app-accesscontrol luci-app-frpc luci-app-ttyd luci-app-netdata #tr_ok/g" include/target.mk
+			sed -i "s/luci-app-sfe luci-app-flowoffload luci-app-nlbwmon luci-app-accesscontrol luci-app-cpufreq/luci-app-sfe luci-app-flowoffload luci-app-nlbwmon luci-app-accesscontrol luci-app-frpc luci-app-ttyd luci-app-netdata luci-app-dockerman lm-sensors autocore #tr_ok/g" include/target.mk
 
 		fi	
 		
@@ -1342,14 +1339,16 @@ source_lean() {
 			sed -i '$a msgstr "本地天气"' feeds/luci/modules/luci-base/po/zh-cn/base.po
 		fi
 	fi
-		#下载一下微信推送插件
-		if [[ -e package/other-plugins/luci-app-serverchan ]]; then
-			cd  package/other-plugins/luci-app-serverchan
-			git pull
-			cd $HOME/$OW/$file/lede/
+
+		#增加首页温度显示
+		temperature_if=$(grep -o "@TARGET_x86" package/lean/autocore/Makefile | wc -l)
+		if [[ "$temperature_if" == "1" ]]; then
+			rm -rf package/lean/autocore/files/autocore
+			sed -i "s/@TARGET_x86/@(i386||x86_64||arm||mipsel||mips||aarch64)/g"  package/lean/autocore/Makefile
+			cp $HOME/$OW/$SF/$OCS/Warehouse/index_temperature/autocore  package/lean/autocore/files/autocore
+			cp $HOME/$OW/$SF/$OCS/Warehouse/index_temperature/temperature package/lean/autocore/files/sbin/temperature
 		else
-			mkdir package/other-plugins
-			git clone https://github.com/tty228/luci-app-serverchan.git package/other-plugins/luci-app-serverchan
+			echo "temperature添加完成"
 		fi
 
 		if [[ -e package/other-plugins/luci-app-passwall ]]; then
@@ -1403,6 +1402,47 @@ source_lean() {
 			echo ""
 		fi
 
+		#other-plugins
+		if [[ -e package/other-plugins ]]; then
+			echo ""
+		else
+			mkdir package/other-plugins
+		fi
+
+
+		#下载一下微信推送插件
+		if [[ -e package/other-plugins/luci-app-serverchan ]]; then
+			cd  package/other-plugins/luci-app-serverchan
+			source_update_git_pull
+			cd $HOME/$OW/$file/lede/
+		else
+			git clone https://github.com/tty228/luci-app-serverchan.git package/other-plugins/luci-app-serverchan
+		fi
+
+		#采用lisaac的luci-app-dockerman
+		if [[ -e package/lean/luci-app-dockerman ]]; then
+			rm -rf package/lean/luci-app-dockerman
+		fi
+
+		if [[ -e package/other-plugins/luci-app-dockerman ]]; then
+				cd  package/other-plugins/luci-app-dockerman
+				source_update_git_pull
+				cd $HOME/$OW/$file/lede/
+		else
+				git clone https://github.com/lisaac/luci-app-dockerman.git package/other-plugins/luci-app-dockerman
+		fi
+
+		dockerman_display=$(grep -o "docker" package/other-plugins/luci-app-dockerman/luasrc/view/dockerman/overview.htm | wc -l)
+		if [[ "$dockerman_display" == "0" ]]; then
+			echo ""
+		else
+			grep "docker" -rl package/other-plugins/luci-app-dockerman/luasrc/* | xargs sed -i 's/docker/services/g'
+
+		fi
+
+		sed -i "s/default n/default y/g" package/other-plugins/luci-app-dockerman/Makefile
+
+
 		#下载lienol的fileassistant
 		if [[ -e package/other-plugins/luci-app-fileassistant ]]; then
 			rm -rf   package/other-plugins/luci-app-fileassistant
@@ -1413,6 +1453,21 @@ source_lean() {
 
 		#将diskman选项启用
 		sed -i "s/default n/default y/g" package/lean/luci-app-diskman/Makefile
+
+		if [[ -e package/other-plugins/copy-pan ]]; then
+			sed -i "s/lm-sensors autocore #tr_ok/lm-sensors autocore copy-pan #tr_ok/g" include/target.mk
+		else
+			echo ""
+		fi
+
+		#删除frps makefilr部分代码
+		frps_makefile=$(grep "#frps_makefile" package/lean/luci-app-frps/Makefile | wc -l )
+		if [[ "$frps_makefile" == "1" ]]; then
+			echo ""
+		else
+			sed -i '27,37d' package/lean/luci-app-frps/Makefile
+			sed -i '$a \#frps_makefile' package/lean/luci-app-frps/Makefile
+		fi
 
 		echo -e ">>$green lean版本配置优化完成$white"	
 }
@@ -1754,7 +1809,7 @@ n1_builder() {
 		echo -e "$green >>检测到N1固件，自动制作N1的OpenWRT镜像$white" && Time
 		if [[ -e $builder_patch ]]; then
 			cd  $builder_patch
-			git pull
+			source_update_git_pull
 			cd $HOME/$OW/$file/lede/
 		else
 			git clone https://github.com/sean-liang/PHICOMM-N1-OpenWRT-Image-Builder $builder_patch
@@ -1882,7 +1937,51 @@ make_continue_to_compile() {
 	esac
 }
 
+clean() {
+	clear &&echo -e "$green>>执行make clean$white"
+	make clean
+	no_clean
+}
 
-description_if
+no_clean() {
+	clear && echo -e "$green>>不执行make clean$white"
+	rm -rf .config && rm -rf ./tmp/ && make menuconfig && make download -j$(nproc) V=s &&  make -j$(nproc) V=s
+}
 
+file_help() {
+	echo ""
+	echo -e "$green用法: ( bash \$openwrt {文件夹} {命令} )$white"
+	echo -e "$green文件夹目录结构：$HOME/$OW/你的文件夹/lede"
+
+}
+
+
+#copy  by:Toyo  modify:ITdesk
+action1="$1"
+action2="$2"
+if [[ -z $1 ]]; then
+	description_if
+else
+	if [[ -e $HOME/$OW/$1 ]]; then
+		if [[ -z $2 ]]; then
+			echo ""
+			echo -e "$red>>命令参数不能为空！$white"
+			file_help
+		else
+			cd $HOME/$OW/$action1/lede
+			$action2
+			if [[ $? -eq 0 ]]; then
+				echo ""
+			else
+				echo ""
+				echo -e "$red>>脚本命令错误，请检查后再输入$white"
+				file_help
+			fi
+		fi
+	else
+		echo ""
+		echo -e "$red>>你输入的文件夹不存在，请检查后再数，注意大小写！！！$white"
+		file_help
+	fi
+fi
 
